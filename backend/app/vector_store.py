@@ -4,13 +4,8 @@ import re
 import difflib
 from typing import List, Dict, Any, Optional
 from rank_bm25 import BM25Okapi
-import chromadb
-
-try:
-    from sentence_transformers import SentenceTransformer
-    HAS_SENTENCE_TRANSFORMERS = True
-except ImportError:
-    HAS_SENTENCE_TRANSFORMERS = False
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 COMMON_MEDICAL_WORDS = [
     "remedies", "remedy", "symptoms", "symptom", "headache", "stomach", "nausea",
@@ -40,12 +35,11 @@ class HybridSearchEngine:
     def __init__(self, data_dir: str = "backend/data"):
         self.data_dir = data_dir
         self.chunks_path = os.path.join(data_dir, "processed_chunks.json")
-        self.chroma_dir = os.path.join(data_dir, "chroma_db")
         
         self.chunks: List[Dict[str, Any]] = []
         self.bm25: Optional[BM25Okapi] = None
-        self.embed_model = None
-        self.chroma_client = None
+        self.tfidf_vectorizer: Optional[TfidfVectorizer] = None
+        self.tfidf_matrix = None
         
         self.vocab_set = set(COMMON_MEDICAL_WORDS).union(ENGLISH_STOP_WORDS)
         self.vocab_list = list(COMMON_MEDICAL_WORDS)
@@ -53,7 +47,7 @@ class HybridSearchEngine:
         self._load_chunks()
         self._build_vocabulary()
         self._init_bm25()
-        self._init_vector_db()
+        self._init_tfidf_vector_search()
 
     def _load_chunks(self):
         if os.path.exists(self.chunks_path):
@@ -110,64 +104,19 @@ class HybridSearchEngine:
         self.bm25 = BM25Okapi(corpus)
         print(f"[HybridSearchEngine] BM25 Index built with {len(corpus)} documents.")
 
-    def _init_vector_db(self):
-        os.makedirs(self.chroma_dir, exist_ok=True)
-        self.chroma_client = chromadb.PersistentClient(path=self.chroma_dir)
-
-        if HAS_SENTENCE_TRANSFORMERS:
-            try:
-                print("[HybridSearchEngine] Loading SentenceTransformer 'all-MiniLM-L6-v2'...")
-                self.embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-            except Exception as e:
-                print(f"[HybridSearchEngine] Error loading SentenceTransformer: {e}")
-                self.embed_model = None
-        
-        self.collection = self.chroma_client.get_or_create_collection(
-            name="allens_keynotes",
-            metadata={"hnsw:space": "cosine"}
-        )
-
-    def index_vector_db(self, force_reindex: bool = False):
+    def _init_tfidf_vector_search(self):
+        """Ultra-lightweight TF-IDF Vector Space Search (< 60MB RAM footprint)."""
         if not self.chunks:
             return
-
-        current_count = self.collection.count()
-        if current_count >= len(self.chunks) and not force_reindex:
-            print(f"[HybridSearchEngine] Vector DB already indexed with {current_count} items.")
-            return
-
-        print(f"[HybridSearchEngine] Indexing {len(self.chunks)} chunks into ChromaDB...")
         
-        batch_size = 256
-        ids = []
-        documents = []
-        metadatas = []
-        embeddings = []
-
-        for i, c in enumerate(self.chunks):
+        corpus_texts = []
+        for c in self.chunks:
             doc_str = f"Remedy: {c['remedy_name']}\nSection: {c['section']}\nSymptoms: {c['text']}"
-            ids.append(c["chunk_id"])
-            documents.append(doc_str)
-            metadatas.append({
-                "remedy_name": c["remedy_name"],
-                "common_name": c.get("common_name", ""),
-                "section": c["section"],
-                "page_number": c["start_page"],
-                "section_type": c["section_type"]
-            })
+            corpus_texts.append(doc_str)
 
-            if self.embed_model:
-                emb = self.embed_model.encode(doc_str).tolist()
-                embeddings.append(emb)
-
-            if len(ids) >= batch_size or i == len(self.chunks) - 1:
-                if self.embed_model and embeddings:
-                    self.collection.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
-                else:
-                    self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
-                ids, documents, metadatas, embeddings = [], [], [], []
-
-        print(f"[HybridSearchEngine] Successfully indexed {self.collection.count()} chunks into ChromaDB.")
+        self.tfidf_vectorizer = TfidfVectorizer(ngram_range=(1, 2), max_features=15000, stop_words="english")
+        self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(corpus_texts)
+        print(f"[HybridSearchEngine] TF-IDF Vector Index built successfully ({self.tfidf_matrix.shape[0]} documents).")
 
     def search_bm25(self, query: str, top_k: int = 20) -> List[Dict[str, Any]]:
         if not self.bm25 or not self.chunks:
@@ -190,27 +139,21 @@ class HybridSearchEngine:
         return results
 
     def search_vector(self, query: str, top_k: int = 20) -> List[Dict[str, Any]]:
-        if not self.collection or self.collection.count() == 0:
+        """Vector similarity search using TF-IDF Cosine Similarity."""
+        if self.tfidf_vectorizer is None or self.tfidf_matrix is None:
             return []
         
-        if self.embed_model:
-            query_emb = self.embed_model.encode(query).tolist()
-            res = self.collection.query(query_embeddings=[query_emb], n_results=top_k)
-        else:
-            res = self.collection.query(query_texts=[query], n_results=top_k)
+        query_vec = self.tfidf_vectorizer.transform([query])
+        similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
+        top_indices = sorted(range(len(similarities)), key=lambda i: similarities[i], reverse=True)[:top_k]
 
         results = []
-        if res and res["ids"] and len(res["ids"][0]) > 0:
-            found_ids = res["ids"][0]
-            distances = res["distances"][0] if "distances" in res and res["distances"] else [0]*len(found_ids)
-            
-            chunk_map = {c["chunk_id"]: c for c in self.chunks}
-            for rank, (cid, dist) in enumerate(zip(found_ids, distances)):
-                if cid in chunk_map:
-                    chunk = chunk_map[cid].copy()
-                    chunk["vector_distance"] = float(dist)
-                    chunk["vector_rank"] = rank + 1
-                    results.append(chunk)
+        for rank, idx in enumerate(top_indices):
+            if similarities[idx] > 0:
+                chunk = self.chunks[idx].copy()
+                chunk["vector_distance"] = float(similarities[idx])
+                chunk["vector_rank"] = rank + 1
+                results.append(chunk)
         return results
 
     def hybrid_search(self, raw_query: str, top_k: int = 10, bm25_weight: float = 0.5, vector_weight: float = 0.5) -> List[Dict[str, Any]]:
