@@ -1,5 +1,8 @@
 import os
 import sys
+import time
+import threading
+import urllib.request
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,6 +55,26 @@ class QueryResponse(BaseModel):
     summary: str
     remedies: List[RemedyItem]
     disclaimer: str
+
+def keep_alive_worker():
+    """Background worker that pings server every 8 minutes to prevent Render free tier from sleeping."""
+    time.sleep(15)  # Initial delay
+    while True:
+        try:
+            # Self-ping /health endpoint
+            req = urllib.request.Request("http://127.0.0.1:8000/health", headers={"User-Agent": "KeepAlivePinger"})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    print("[KeepAlive] Self-ping successful — server kept awake.")
+        except Exception as e:
+            print(f"[KeepAlive] Self-ping status: {e}")
+        # Ping every 8 minutes (480 seconds)
+        time.sleep(480)
+
+@app.on_event("startup")
+def start_keep_alive():
+    t = threading.Thread(target=keep_alive_worker, daemon=True)
+    t.start()
 
 @app.get("/")
 def serve_frontend():
