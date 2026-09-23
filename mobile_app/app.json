@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Allen's Keynotes AI",
+    "slug": "allens-keynotes-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nilkamal.allenskeynotes"
+    },
+    "android": {
+      "package": "com.nilkamal.allenskeynotes"
+    }
+  }
+}
