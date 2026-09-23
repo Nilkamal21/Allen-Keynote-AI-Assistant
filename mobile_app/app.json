@@ -4,12 +4,22 @@
     "slug": "allens-keynotes-ai",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./allens_keynotes_icon_256.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./allens_keynotes_icon_256.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nilkamal.allenskeynotes"
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./allens_keynotes_icon_256.png",
+        "backgroundColor": "#ffffff"
+      },
       "package": "com.nilkamal.allenskeynotes"
     }
   }

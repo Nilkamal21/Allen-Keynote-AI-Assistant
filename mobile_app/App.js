@@ -9,11 +9,15 @@ import {
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
+  Image,
   Alert
 } from 'react-native';
 
 // LIVE DEPLOYED API URL
 const API_BASE_URL = 'https://allen-keynote-ai-assistant.onrender.com';
+
+// App Logo
+const AppLogo = require('./allens_keynotes_icon_256.png');
 
 export default function App() {
   const [query, setQuery] = useState('');
@@ -99,11 +103,14 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
-      {/* Top Navbar */}
+      {/* Top Navbar with App Logo */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Allen's Keynotes AI</Text>
-          <Text style={styles.headerSubtitle}>Homeopathic Reference Assistant</Text>
+        <View style={styles.brandContainer}>
+          <Image source={AppLogo} style={styles.logoImage} resizeMode="contain" />
+          <View>
+            <Text style={styles.headerTitle}>Allen's Keynotes AI</Text>
+            <Text style={styles.headerSubtitle}>Homeopathic Reference Assistant</Text>
+          </View>
         </View>
         
         {result && (
@@ -228,6 +235,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  brandContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  logoImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
   },
   headerTitle: {
     fontSize: 18,
