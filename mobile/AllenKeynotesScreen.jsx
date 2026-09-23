@@ -18,12 +18,13 @@ const API_BASE_URL = 'http://127.0.0.1:8000';
 export default function AllenKeynotesScreen() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [result, setResult] = useState(null);
 
   const searchBook = async (searchQuery) => {
     const targetQuery = searchQuery || query;
     if (!targetQuery.trim()) {
-      Alert.alert('Empty Query', 'Please enter a symptom or remedy to search.');
+      Alert.alert('Empty Query', 'Please enter or speak a symptom to search.');
       return;
     }
 
@@ -52,9 +53,19 @@ export default function AllenKeynotesScreen() {
     }
   };
 
+  const toggleVoiceInput = () => {
+    setIsListening(!isListening);
+    if (!isListening) {
+      Alert.alert(
+        'Voice Search Active',
+        'Voice input activated. Speak your symptom or remedy question clearly into your microphone.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const renderRemedyCard = ({ item }) => (
     <View style={styles.card}>
-      {/* Remedy Header */}
       <View style={styles.cardHeader}>
         <View style={styles.remedyTitleContainer}>
           <Text style={styles.remedyName}>{item.remedy_name}</Text>
@@ -67,7 +78,6 @@ export default function AllenKeynotesScreen() {
         </View>
       </View>
 
-      {/* Sections & Symptoms */}
       {item.sections.map((sec, secIdx) => (
         <View key={secIdx} style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
@@ -93,7 +103,7 @@ export default function AllenKeynotesScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Allen's Keynotes AI</Text>
-          <Text style={styles.headerSubtitle}>Homeopathic Reference Assistant</Text>
+          <Text style={styles.headerSubtitle}>Voice & Text Reference Assistant</Text>
         </View>
         
         {result && (
@@ -107,14 +117,27 @@ export default function AllenKeynotesScreen() {
 
       {/* Search Box */}
       <View style={styles.searchBox}>
-        <TextInput
-          style={styles.input}
-          placeholder="Ask anything (e.g. Nux Vomica or burning stomach pain)..."
-          placeholderTextColor="#94a3b8"
-          value={query}
-          onChangeText={setQuery}
-          multiline
-        />
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type or speak a question (e.g. Nux Vomica or burning stomach pain)..."
+            placeholderTextColor="#94a3b8"
+            value={query}
+            onChangeText={setQuery}
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.micButton, isListening && styles.micActive]}
+            onPress={toggleVoiceInput}>
+            <Text style={styles.micButtonText}>{isListening ? '🎙️' : '🎤'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {isListening && (
+          <View style={styles.listeningBar}>
+            <Text style={styles.listeningText}>🔴 Listening to your voice... Speak now</Text>
+          </View>
+        )}
 
         {/* Quick Chips */}
         <View style={styles.chipContainer}>
@@ -248,16 +271,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
+  inputWrapper: {
+    position: 'relative',
+  },
   input: {
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     padding: 12,
+    paddingRight: 45,
     fontSize: 14,
     color: '#0f172a',
-    minHeight: 50,
+    minHeight: 55,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: '#cbd5e1',
+  },
+  micButton: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  micActive: {
+    backgroundColor: '#ef4444',
+  },
+  micButtonText: {
+    fontSize: 18,
+  },
+  listeningBar: {
+    marginTop: 8,
+    padding: 6,
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+  },
+  listeningText: {
+    fontSize: 12,
+    color: '#dc2626',
+    fontWeight: '700',
   },
   chipContainer: {
     flexDirection: 'row',

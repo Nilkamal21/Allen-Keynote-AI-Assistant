@@ -33,6 +33,14 @@
             box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.06);
             border-color: #cbd5e1;
         }
+        .mic-listening {
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+            70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between">
@@ -69,7 +77,7 @@
                         Ask Anything About Allen's Keynotes
                     </label>
                     <span class="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-                        <i class="fa-solid fa-shield-check"></i> Grounded Book Search
+                        <i class="fa-solid fa-microphone"></i> Voice Search Supported
                     </span>
                 </div>
 
@@ -77,9 +85,25 @@
                     <textarea 
                         id="query-input" 
                         rows="2" 
-                        class="w-full px-4 py-3.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-slate-800 placeholder-slate-400 text-sm resize-none bg-slate-50/50 focus:bg-white transition-all font-medium"
+                        class="w-full pr-14 px-4 py-3.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-slate-800 placeholder-slate-400 text-sm resize-none bg-slate-50/50 focus:bg-white transition-all font-medium"
                         placeholder="e.g. Which remedies are associated with burning stomach pain?"
                         required></textarea>
+                    
+                    <!-- Voice Input Microphone Button -->
+                    <button 
+                        type="button" 
+                        id="mic-btn" 
+                        onclick="toggleVoiceInput()"
+                        title="Click to speak your question"
+                        class="absolute right-3 top-3.5 w-9 h-9 rounded-xl bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-500 flex items-center justify-center transition-all">
+                        <i class="fa-solid fa-microphone text-base"></i>
+                    </button>
+                </div>
+
+                <!-- Voice Status Indicator -->
+                <div id="voice-status" class="hidden mt-2 text-xs text-rose-600 font-bold flex items-center space-x-2">
+                    <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                    <span>Listening... Speak your question now</span>
                 </div>
 
                 <!-- Chips -->
@@ -88,7 +112,7 @@
                     <button type="button" onclick="setQuery('Nux Vomica stomach symptoms')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-slate-600 font-medium transition-colors border border-slate-200">Nux Vomica</button>
                     <button type="button" onclick="setQuery('Burning stomach pain with nausea')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-slate-600 font-medium transition-colors border border-slate-200">Burning Stomach Pain</button>
                     <button type="button" onclick="setQuery('Headache worse in sunlight')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-slate-600 font-medium transition-colors border border-slate-200">Sun Headache</button>
-                    <button type="button" onclick="setQuery('Compare Nux Vomica and Bryonia')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-slate-600 font-medium transition-colors border border-slate-200">Compare Remedies</button>
+                    <button type="button" onclick="setQuery('What are the mental symptoms of Aconitum?')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-slate-600 font-medium transition-colors border border-slate-200">Aconitum Mental</button>
                 </div>
 
                 <div class="mt-4 flex justify-end">
@@ -146,11 +170,77 @@
     <!-- Footer -->
     <footer class="bg-white border-t border-slate-200 py-4 mt-12">
         <div class="max-w-4xl mx-auto px-4 text-center text-xs text-slate-400 font-medium">
-            Allen's Keynotes AI Assistant &bull; Dual Online/Offline Grounded Engine
+            Allen's Keynotes AI Assistant &bull; Voice Search & Dual Grounded Engine
         </div>
     </footer>
 
     <script>
+        let recognition = null;
+        let isListening = false;
+
+        // Initialize Speech Recognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = function() {
+                isListening = true;
+                const micBtn = document.getElementById('mic-btn');
+                const voiceStatus = document.getElementById('voice-status');
+                micBtn.className = 'absolute right-3 top-3.5 w-9 h-9 rounded-xl bg-rose-500 text-white flex items-center justify-center mic-listening transition-all';
+                voiceStatus.classList.remove('hidden');
+            };
+
+            recognition.onresult = function(event) {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                document.getElementById('query-input').value = transcript;
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                stopVoiceInput();
+                if (event.error !== 'no-speech') {
+                    alert('Voice input error: ' + event.error);
+                }
+            };
+
+            recognition.onend = function() {
+                stopVoiceInput();
+            };
+        }
+
+        function toggleVoiceInput() {
+            if (!recognition) {
+                alert('Speech Recognition is not supported in your browser. Please try Chrome, Edge, or Safari.');
+                return;
+            }
+
+            if (isListening) {
+                recognition.stop();
+                stopVoiceInput();
+            } else {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error('Failed to start recognition:', e);
+                }
+            }
+        }
+
+        function stopVoiceInput() {
+            isListening = false;
+            const micBtn = document.getElementById('mic-btn');
+            const voiceStatus = document.getElementById('voice-status');
+            micBtn.className = 'absolute right-3 top-3.5 w-9 h-9 rounded-xl bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-500 flex items-center justify-center transition-all';
+            voiceStatus.classList.add('hidden');
+        }
+
         function setQuery(text) {
             document.getElementById('query-input').value = text;
             document.getElementById('query-input').focus();
@@ -186,7 +276,6 @@
 
                 const data = await res.json();
 
-                // Update Mode Badge
                 if (data.mode === 'online') {
                     modeBadge.className = 'flex items-center space-x-2 text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-700';
                     modeDot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
@@ -197,7 +286,6 @@
                     modeLabel.innerText = 'Offline Local Mode';
                 }
 
-                // AI Synthesis Card
                 if (data.ai_synthesis) {
                     aiText.innerHTML = data.ai_synthesis
                         .replace(/\n\n/g, '</p><p class="mt-2">')
@@ -210,7 +298,6 @@
 
                 summaryHeader.innerText = data.summary;
 
-                // Render Remedy Cards
                 remediesList.innerHTML = '';
                 if (data.remedies && data.remedies.length > 0) {
                     data.remedies.forEach(rem => {
